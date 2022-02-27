@@ -46,11 +46,22 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     // Mapping from token ID to Bundle
     mapping(uint256 => Bundle) private _bundles;
 
-    // bundle structure 
-    struct Bundle {
-        mapping(address => uint256[]) nftGroups;
-        address[] nftAddresses;
+    // asset structure
+    struct Asset {
+        address nftRegistry,
+        uint256 tokenId
     }
+    
+    // bundle structure
+    struct Bundle{
+        mapping(bytes32 => Asset) assets;
+    }
+    
+    // old bundle structure 
+  //  struct Bundle {
+  //      mapping(address => uint256[]) nftGroups;
+  //      address[] nftAddresses;
+  //  }
 
     /**
      * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
@@ -200,29 +211,28 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     /// ******
 
     function create(
-        address[] calldata _nftAddresses,
-        uint256[] calldata _tokenIds,
-        uint256[] calldata _sizes
+        address[] memory _nftAddresses,
+        uint256[] memory _tokenIds,
+        uint256[] memory _sizes
     ) external returns (uint256) {
         require(_nftAddresses.length == _sizes.length, "BUNDLE: size array does not match address array length");
         
         uint256 tokenId = Counters.current(_ids);
         _bundles[tokenId] = Bundle();
         Bundle bdl = _bundles[tokenId];
-        
+
 		    uint offset;
 		    for(uint i=0; i<_nftAddresses.length; i++){
 			      IERC721 nftRegistry = IERC721(_nftAddresses[i]);
 			      for(uint j=0; j<_sizes[i]; j++){
                 require(nftRegistry.ownerOf(_tokenIds[offset+j]==_msgSender(), "BUNDLE: Only the owner can create a new bundle."));
-                bdl.nftGroups[_nftAddresses[i]] = _tokenIds[offset:_sizes[i+1]];
+        //        bdl.nftGroups[_nftAddresses[i]] = _tokenIds[offset:_sizes[i+1]];
+                _tokenIds[offset+j] 
 		        }
 			      offset += _sizes[i];
         }
-        bdl.nftAddresses = _nftAddresses;
-       // uint256 tokenId = Counters.current(_ids);
+
         _mint(_msgSender(), tokenId);
-       // _bundles[tokenId] = bdl;
         Counters.increment(_ids);
         emit Creation(_msgSender(), tokenId);
     }
@@ -230,10 +240,10 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     function burn(
         uint256 bundleId
     ) external{
-        
+        require(BDL721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");        
+        _burn(bundleId);
 
-
-        revert("burn function is not in use.");
+//        revert("burn function is not in use.");
     }
 
     function insert(
@@ -263,7 +273,10 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     /// ******
     /// Internal
     /// ******
-
+    
+    function generateHash(address _nftRegistry, uint256 _tokenId) public pure returns(bytes32){
+        return keccak256(abi.encodePacked(_nftRegistry, _tokenId));
+    }
 
     /**
      * @dev Safely transfers `tokenId` token from `from` to `to`, checking first that contract recipients
@@ -364,8 +377,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         require(to != address(0), "ERC721: mint to the zero address");
         require(!_exists(tokenId), "ERC721: token already minted");
 
-        _beforeTokenTransfer(address(0), to, tokenId);
-
         _balances[to] += 1;
         _owners[tokenId] = to;
 
@@ -386,8 +397,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
      */
     function _burn(uint256 tokenId) internal virtual {
         address owner = ERC721.ownerOf(tokenId);
-
-        _beforeTokenTransfer(owner, address(0), tokenId);
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -509,7 +518,11 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         address from,
         address to,
         uint256 tokenId
-    ) internal virtual {}
+    ) internal virtual {
+
+
+
+    }
 
     /**
      * @dev Hook that is called after any transfer of tokens. This includes
