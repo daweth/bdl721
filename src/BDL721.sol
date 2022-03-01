@@ -43,26 +43,25 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
+    // ******
+    // Storage
+    // ******
+     
+    // Mapping from hash to Asset
+    mapping(bytes32 => Asset) public _assets;
+
     // Mapping from token ID to Bundle
-    mapping(uint256 => Bundle) private _bundles;
+    mapping(uint256 => bytes32[]) private _bundles;
 
-    // asset structure
+    // Mapping from Asset hash to Token ID
+    mapping(bytes32 => uint256) private _bundleOf; 
+
+    // Asset structure
     struct Asset {
-        address nftRegistry,
-        uint256 tokenId
+        address nftRegistry;
+        uint256 tokenId;
     }
     
-    // bundle structure
-    struct Bundle{
-        mapping(bytes32 => Asset) assets;
-    }
-    
-    // old bundle structure 
-  //  struct Bundle {
-  //      mapping(address => uint256[]) nftGroups;
-  //      address[] nftAddresses;
-  //  }
-
     /**
      * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
      */
@@ -96,7 +95,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         address owner = _owners[tokenId];
         require(owner != address(0), "ERC721: owner query for nonexistent token");
         return owner;
-    }
+    } 
 
     /**
      * @dev See {IERC721Metadata-name}.
@@ -216,34 +215,43 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256[] memory _sizes
     ) external returns (uint256) {
         require(_nftAddresses.length == _sizes.length, "BUNDLE: size array does not match address array length");
-        
+            
+        bytes32[] memory bdl;
         uint256 tokenId = Counters.current(_ids);
-        _bundles[tokenId] = Bundle();
-        Bundle bdl = _bundles[tokenId];
 
 		    uint offset;
 		    for(uint i=0; i<_nftAddresses.length; i++){
 			      IERC721 nftRegistry = IERC721(_nftAddresses[i]);
 			      for(uint j=0; j<_sizes[i]; j++){
-                require(nftRegistry.ownerOf(_tokenIds[offset+j]==_msgSender(), "BUNDLE: Only the owner can create a new bundle."));
-        //        bdl.nftGroups[_nftAddresses[i]] = _tokenIds[offset:_sizes[i+1]];
-                _tokenIds[offset+j] 
+                require(nftRegistry.ownerOf(_tokenIds[offset+j])==_msgSender(), "BUNDLE: Only the owner can create a new bundle."); 
+
+                bytes32 hash = generateHash(_nftAddresses[i], _tokenIds[offset+j]);
+                require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again.");
+                
+                Asset memory nft = _assets[hash];
+                if(nft.nftRegistry==address(0)){
+                    _assets[hash] = Asset(_nftAddresses[i], _tokenIds[offset+j]);
+                }
+
+                _bundleOf[hash]=tokenId; // consider moving to the very end? /// sets the ownerOf to the new bundleID
+                bdl[offset+j]=hash; // add the hash to the bundle in progress
+               // bdl.push(hash); // add the hash to the bundle in progress
 		        }
 			      offset += _sizes[i];
         }
-
+        
+        _bundles[tokenId]=bdl; // set mapping for bundle in storage
         _mint(_msgSender(), tokenId);
         Counters.increment(_ids);
         emit Creation(_msgSender(), tokenId);
+        return tokenId;
     }
 
     function burn(
         uint256 bundleId
     ) external{
-        require(BDL721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");        
+        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");        
         _burn(bundleId);
-
-//        revert("burn function is not in use.");
     }
 
     function insert(
