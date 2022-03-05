@@ -43,15 +43,15 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     // Mapping from owner to operator approvals
     mapping(address => mapping(address => bool)) private _operatorApprovals;
 
-    // ******
-    // Storage
-    // ******
+    /// ******
+    /// STORAGE 
+    /// ******
      
     // Mapping from hash to Asset
     mapping(bytes32 => Asset) public _assets;
 
     // Mapping from token ID to Bundle
-    mapping(uint256 => bytes32[]) private _bundles;
+    mapping(uint256 => Bundle) private _bundles;
 
     // Mapping from Asset hash to Token ID
     mapping(bytes32 => uint256) private _bundleOf; 
@@ -60,6 +60,12 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     struct Asset {
         address nftRegistry;
         uint256 tokenId;
+    }
+
+    // Bundle structure
+    struct Bundle {
+        bytes32[] assetHashes;
+        mapping(bytes32 => uint256) assetIndices;
     }
     
     /**
@@ -209,12 +215,14 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     /// Core
     /// ******
 
+
+
     function create(
         address[] memory _nftAddresses,
         uint256[] memory _tokenIds,
         uint256[] memory _sizes
     ) external returns (uint256) {
-        require(_nftAddresses.length == _sizes.length, "BUNDLE: size array does not match address array length");
+        require(_nftAddresses.length == _sizes.length, "BDL721: size array does not match address array length");
             
         bytes32[] memory bdl;
         uint256 tokenId = Counters.current(_ids);
@@ -256,10 +264,23 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
 
     function insert(
         address nftAddress,
-        uint256 tokenIds,
+        uint256 tokenId,
         uint256 bundleId
     ) external{
-        revert("insert function is not in use.");
+        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");
+
+        bytes32 hash = generateHash(nftAddress, tokenId);
+        require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again.");
+        
+        Asset memory nft = _assets[hash];
+        if(nft.nftRegistry==address(0)){
+            _assets[hash] = Asset(nftAddress,tokenId);
+        }
+        _bundles[bundleId].push(hash);
+        _bundleOf[hash] = bundleId;
+
+
+       // revert("insert function is not in use.");
     }
 
     function remove(
@@ -267,7 +288,15 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256 tokenIds,
         uint256 bundleId
     ) external{
-        
+        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");
+
+        bytes32 hash = generateHash(nftAddress, tokenId);
+        require(_bundleOf[hash]==bundleId, "BDL721: Asset is not part of the bundle specified. Please try again.");
+
+        Asset memory nft = _assets[hash];
+        require(nft.nftRegistry!=address(0), "BDL721: Asset has not been initiated yet.");
+        _bundles[bundleId].remove(hash); // delete the hash from the bundle
+        _bundleOf[hash] = 0; // reset asset bundle relation
 
         revert("remove function is not in use.");
     }
@@ -419,13 +448,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
 
     /**
      * @dev Transfers `tokenId` from `from` to `to`.
-     *  As opposed to {transferFrom}, this imposes no restrictions on msg.sender.
-     *
-     * Requirements:
-     *
-     * - `to` cannot be the zero address.
-     * - `tokenId` token must be owned by `from`.
-     *
      * Emits a {Transfer} event.
      */
     function _transfer(
@@ -436,7 +458,9 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         require(ERC721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
         require(to != address(0), "ERC721: transfer to the zero address");
 
-        _beforeTokenTransfer(from, to, tokenId);
+
+        _transferAssets(tokenId);
+
 
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
@@ -452,7 +476,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
 
     /**
      * @dev Approve `to` to operate on `tokenId`
-     *
      * Emits a {Approval} event.
      */
     function _approve(address to, uint256 tokenId) internal virtual {
@@ -462,7 +485,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
 
     /**
      * @dev Approve `operator` to operate on all of `owner` tokens
-     *
      * Emits a {ApprovalForAll} event.
      */
     function _setApprovalForAll(
@@ -474,6 +496,33 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         _operatorApprovals[owner][operator] = approved;
         emit ApprovalForAll(owner, operator, approved);
     }
+
+    /// ******
+    /// CORE
+    /// ******
+
+    function _transferAssets(
+        address from,
+        address to,
+        uint256 bundleId
+    ) internal virtual {
+        bytes32[] memory assets = _bundles[bundleId];
+        for(uint i=0; i<assets.length, i++){
+            Asset memory nft = _assets[ssets[i]];
+            IERC721 memory nftRegistry = IERC721(nft.nftAddress);
+            require(nftRegistry.transferFrom(from,to,nft.tokenId), "BDL721: Failed to transfer an asset within a bundle"); 
+        }
+    }
+  
+    function _removeFromBundleArray(
+        address nftAddress,
+        uint256 tokenId,
+        uint256 bundleId
+    ) internal virtual { 
+        
+    }
+
+
 
     /**
      * @dev Internal function to invoke {IERC721Receiver-onERC721Received} on a target address.
@@ -527,9 +576,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         address to,
         uint256 tokenId
     ) internal virtual {
-
-
-
     }
 
     /**
