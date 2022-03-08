@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-// OpenZeppelin Contracts v4.4.1 (token/ERC721/ERC721.sol)
 
 pragma solidity ^0.8.0;
 
@@ -12,17 +11,13 @@ import "./Context.sol";
 import "./Strings.sol";
 import "./ERC165.sol";
 import "./Counters.sol";
+import "./test/utils/Console.sol";
 
-/**
- * @dev Implementation of https://eips.ethereum.org/EIPS/eip-721[ERC721] Non-Fungible Token Standard, including
- * the Metadata extension, but not including the Enumerable extension, which is available separately as
- * {ERC721Enumerable}.
- */
-contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
+contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     using Address for address;
     using Strings for uint256;
     using Counters for Counters.Counter;
-
+    
     Counters.Counter private _ids;
 
     // Token name
@@ -51,10 +46,13 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     mapping(bytes32 => Asset) public _assets;
 
     // Mapping from token ID to Bundle
-    mapping(uint256 => Bundle) private _bundles;
+    mapping(uint256 => bytes32[]) private _bundles;
 
     // Mapping from Asset hash to Token ID
     mapping(bytes32 => uint256) private _bundleOf; 
+
+    // Mapping from Asset hash to Index within Bundle
+    mapping(bytes32 => uint256) private _indices;
 
     // Asset structure
     struct Asset {
@@ -62,12 +60,6 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256 tokenId;
     }
 
-    // Bundle structure
-    struct Bundle {
-        bytes32[] assetHashes;
-        mapping(bytes32 => uint256) assetIndices;
-    }
-    
     /**
      * @dev Initializes the contract by setting a `name` and a `symbol` to the token collection.
      */
@@ -140,7 +132,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
      * @dev See {IERC721-approve}.
      */
     function approve(address to, uint256 tokenId) public virtual override {
-        address owner = ERC721.ownerOf(tokenId);
+        address owner = BDL721.ownerOf(tokenId);
         require(to != owner, "ERC721: approval to current owner");
 
         require(
@@ -148,7 +140,12 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
             "ERC721: approve caller is not owner nor approved for all"
         );
 
-        _approve(to, tokenId);
+        _approveAssets(to, tokenId); // approve all underlying assets
+        _tokenApprovals[tokenId] = to; // aprove this bundle
+        emit Approval(BDL721.ownerOf(tokenId), to, tokenId); // emission
+
+        // use external approve function instead of internal function for public-facing stuff
+       // _approve(to, tokenId);
     }
 
     /**
@@ -183,7 +180,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256 tokenId
     ) public virtual override {
         //solhint-disable-next-line max-line-length
-        require(_isApprovedOrOwner(_msgSender(), tokenId), "ERC721: transfer caller is not owner nor approved");
+        require(_isApprovedOrOwner(_msgSender(), tokenId), "BDL721: transfer caller is not owner nor approved");
         _transfer(from, to, tokenId);
     }
 
@@ -215,40 +212,40 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     /// Core
     /// ******
 
-
-
     function create(
         address[] memory _nftAddresses,
         uint256[] memory _tokenIds,
         uint256[] memory _sizes
     ) external returns (uint256) {
         require(_nftAddresses.length == _sizes.length, "BDL721: size array does not match address array length");
-            
-        bytes32[] memory bdl;
+
+        bytes32[] memory bdl = new bytes32[](_tokenIds.length);
         uint256 tokenId = Counters.current(_ids);
 
-		    uint offset;
+		    uint offset = 0;
 		    for(uint i=0; i<_nftAddresses.length; i++){
 			      IERC721 nftRegistry = IERC721(_nftAddresses[i]);
+            require(nftRegistry.isApprovedForAll(_msgSender(), address(this)), "BDL721: Bundle Contract is not approved to manage these assets");
+
 			      for(uint j=0; j<_sizes[i]; j++){
-                require(nftRegistry.ownerOf(_tokenIds[offset+j])==_msgSender(), "BUNDLE: Only the owner can create a new bundle."); 
+                    
+                require(nftRegistry.ownerOf(_tokenIds[offset+j])==_msgSender(), "BDL721: Only the owner can create a new bundle"); 
 
                 bytes32 hash = generateHash(_nftAddresses[i], _tokenIds[offset+j]);
-                require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again.");
-                
+                require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again");
+
                 Asset memory nft = _assets[hash];
                 if(nft.nftRegistry==address(0)){
                     _assets[hash] = Asset(_nftAddresses[i], _tokenIds[offset+j]);
                 }
-
                 _bundleOf[hash]=tokenId; // consider moving to the very end? /// sets the ownerOf to the new bundleID
-                bdl[offset+j]=hash; // add the hash to the bundle in progress
-               // bdl.push(hash); // add the hash to the bundle in progress
+                _indices[hash] = offset+j; // store the index of the hash within the bundle
+                bdl[offset+j] = hash; // add the hash to the bundle in progress
 		        }
-			      offset += _sizes[i];
+			    offset += _sizes[i];
         }
         
-        _bundles[tokenId]=bdl; // set mapping for bundle in storage
+        _bundles[tokenId] = bdl;
         _mint(_msgSender(), tokenId);
         Counters.increment(_ids);
         emit Creation(_msgSender(), tokenId);
@@ -258,7 +255,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     function burn(
         uint256 bundleId
     ) external{
-        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");        
+        require(BDL721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");        
         _burn(bundleId);
     }
 
@@ -267,7 +264,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256 tokenId,
         uint256 bundleId
     ) external{
-        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");
+        require(BDL721.ownerOf(bundleId)==_msgSender(), "BDL721: Caller does not own the bundle");
 
         bytes32 hash = generateHash(nftAddress, tokenId);
         require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again.");
@@ -278,33 +275,39 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         }
         _bundles[bundleId].push(hash);
         _bundleOf[hash] = bundleId;
-
-
-       // revert("insert function is not in use.");
+        _indices[hash] = _bundles[bundleId].length;
     }
 
     function remove(
         address nftAddress,
-        uint256 tokenIds,
+        uint256 tokenId,
         uint256 bundleId
     ) external{
-        require(ERC721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");
+        require(BDL721.ownerOf(bundleId) == _msgSender(), "Caller does not own the bundle");
 
         bytes32 hash = generateHash(nftAddress, tokenId);
         require(_bundleOf[hash]==bundleId, "BDL721: Asset is not part of the bundle specified. Please try again.");
 
         Asset memory nft = _assets[hash];
         require(nft.nftRegistry!=address(0), "BDL721: Asset has not been initiated yet.");
-        _bundles[bundleId].remove(hash); // delete the hash from the bundle
-        _bundleOf[hash] = 0; // reset asset bundle relation
-
-        revert("remove function is not in use.");
+        _removeFromBundleArray(hash, bundleId); // delete the hash from the bundle storage
+        delete _bundleOf[hash];
+        delete _indices[hash]; 
     }
     
     function check(
         uint256 bundleId
     ) external returns(bool) {
-        revert("check function is not in use");
+        bytes32[] memory bdl = _bundles[bundleId];
+        for(uint i=0; i<bdl.length; i++){
+            Asset memory nft = _assets[bdl[i]];
+            IERC721 nftRegistry = IERC721(nft.nftRegistry);
+            if(nftRegistry.ownerOf(nft.tokenId)!=BDL721.ownerOf(bundleId)){
+                _burn(bundleId);         
+                return false;
+            }
+        }
+        return true;
     }
 
     /// ******
@@ -364,7 +367,7 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
      */
     function _isApprovedOrOwner(address spender, uint256 tokenId) internal view virtual returns (bool) {
         require(_exists(tokenId), "ERC721: operator query for nonexistent token");
-        address owner = ERC721.ownerOf(tokenId);
+        address owner = BDL721.ownerOf(tokenId);
         return (spender == owner || getApproved(tokenId) == spender || isApprovedForAll(owner, spender));
     }
 
@@ -433,7 +436,8 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
      * Emits a {Transfer} event.
      */
     function _burn(uint256 tokenId) internal virtual {
-        address owner = ERC721.ownerOf(tokenId);
+        address owner = BDL721.ownerOf(tokenId);
+
 
         // Clear approvals
         _approve(address(0), tokenId);
@@ -455,12 +459,12 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         address to,
         uint256 tokenId
     ) internal virtual {
-        require(ERC721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
+        require(BDL721.ownerOf(tokenId) == from, "ERC721: transfer from incorrect owner");
         require(to != address(0), "ERC721: transfer to the zero address");
 
 
-        _transferAssets(tokenId);
-
+        // Transfer all assets within the bundle
+        _transferAssets(from, to, tokenId);
 
         // Clear approvals from the previous owner
         _approve(address(0), tokenId);
@@ -474,13 +478,15 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         _afterTokenTransfer(from, to, tokenId);
     }
 
+
     /**
      * @dev Approve `to` to operate on `tokenId`
      * Emits a {Approval} event.
      */
     function _approve(address to, uint256 tokenId) internal virtual {
+   //     _approveAssets(to, tokenId);
         _tokenApprovals[tokenId] = to;
-        emit Approval(ERC721.ownerOf(tokenId), to, tokenId);
+        emit Approval(BDL721.ownerOf(tokenId), to, tokenId);
     }
 
     /**
@@ -506,22 +512,65 @@ contract ERC721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         address to,
         uint256 bundleId
     ) internal virtual {
-        bytes32[] memory assets = _bundles[bundleId];
-        for(uint i=0; i<assets.length, i++){
-            Asset memory nft = _assets[ssets[i]];
-            IERC721 memory nftRegistry = IERC721(nft.nftAddress);
-            require(nftRegistry.transferFrom(from,to,nft.tokenId), "BDL721: Failed to transfer an asset within a bundle"); 
+        bytes32[] memory bdl = _bundles[bundleId];
+        for(uint i=0; i<bdl.length; i++){
+            Asset memory nft = _assets[bdl[i]];
+            IERC721 nftRegistry = IERC721(nft.nftRegistry);
+            nftRegistry.transferFrom(from, to, nft.tokenId);
+            /** 
+            (bool success, bytes memory data) = nft.nftRegistry.delegatecall(
+            abi.encodeWithSignature("transferFrom(address,address,uint256)",from,to,nft.tokenId)
+            );
+            require(success, "BDL721: Failed to transfer assets");
+            */
         }
     }
   
-    function _removeFromBundleArray(
-        address nftAddress,
-        uint256 tokenId,
+    function _approveAssets(
+        address to, 
         uint256 bundleId
-    ) internal virtual { 
-        
+    ) internal virtual {
+        bytes32[] memory bdl = _bundles[bundleId];
+        for(uint i=0; i<bdl.length; i++){
+            Asset memory nft = _assets[bdl[i]];
+            IERC721 nftRegistry = IERC721(nft.nftRegistry);
+            nftRegistry.approve(to, nft.tokenId);            
+
+/** 
+ (bool success, bytes memory data) = address(nftRegistry).delegatecall(
+            abi.encodeWithSignature("approve(address,uint256)",to,nft.tokenId)
+            );
+            require(success, "BDL721: Failed to approve assets");
+*/
+           
+        }
+    }
+/**
+    function _setApprovalForAssets(
+        address owner,
+        address operator,
+        uint256 bundleId,
+        bool approved
+    ) internal virtual {
+        bytes32[] memory bdl = _bundles[bundleId];
+        for(uint i=0; i<bdl.length; i++){
+            Asset memory nft = _assets[bdl[i]];
+            IERC721 nftRegistry = IERC721(nft.nftRegistry);
+            if(nftRegistry.isApprovedForAll(owner, operator)){ break; }
+
+            nftRegistry.setApprovalForAll(operator, approved);
+        }
     }
 
+**/
+
+    function _removeFromBundleArray(
+        bytes32 hash,
+        uint256 bundleId
+    ) internal virtual {  
+        uint index = _indices[hash]; 
+        delete _bundles[bundleId][index];
+    }
 
 
     /**
