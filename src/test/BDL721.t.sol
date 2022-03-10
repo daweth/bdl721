@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Unlicense
-pragma solidity 0.8.10;
+pragma solidity ^0.8.0;
 
 import "ds-test/test.sol";
 import "../BDL721.sol";
@@ -80,9 +80,6 @@ contract BundlerTest is DSTest {
         assertEq(address(bdl.ownerOf(bundleId)), users[1]);
     }
 
-
-
-
     function test_transferBundle() public {
         address payable alice = users[1];
         address payable bob = users[3];
@@ -124,8 +121,15 @@ contract BundlerTest is DSTest {
 
     }
 
-    /**
     function test_burnBundle() public {
+        address payable alice = users[1];
+
+        vm.prank(alice);
+        bdl.burn(bundleId);
+        vm.expectRevert(
+            bytes("ERC721: owner query for nonexistent token")
+        );
+         bdl.ownerOf(bundleId);
     }
 
     function test_insertBundle() public {
@@ -133,7 +137,6 @@ contract BundlerTest is DSTest {
 
     function test_removeBundle() public {
     }
-    **/
 
 
 }

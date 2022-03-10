@@ -13,6 +13,8 @@ import "./ERC165.sol";
 import "./Counters.sol";
 import "./test/utils/Console.sol";
 
+/// @title A bundling contrract for ERC721s
+///  @author daweth
 contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     using Address for address;
     using Strings for uint256;
@@ -209,7 +211,7 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     }
         
     /// ******
-    /// Core
+    /// Core Functions
     /// ******
 
     function create(
@@ -294,7 +296,8 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         delete _bundleOf[hash];
         delete _indices[hash]; 
     }
-    
+
+
     function check(
         uint256 bundleId
     ) external returns(bool) {
