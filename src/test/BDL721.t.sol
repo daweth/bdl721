@@ -118,6 +118,23 @@ contract BundlerTest is DSTest {
     }
 
     function test_checkValidBundle() public {
+        require(bdl.check(bundleId), "Failed to check bundleID");
+    }
+    
+    function test_checkInvalidBundle() public {
+        address payable stacy = users[1];
+        address payable bob = users[2]; 
+
+        vm.prank(stacy);
+        sand.transferFrom(stacy, bob, 1);
+        
+        require(!bdl.check(bundleId), "Failed to invalidate bundle");
+
+        
+        vm.expectRevert(
+            bytes("ERC721: owner query for nonexistent token")
+        );
+        bdl.ownerOf(bundleId);
 
     }
 
@@ -133,9 +150,23 @@ contract BundlerTest is DSTest {
     }
 
     function test_insertBundle() public {
+        address payable alice = users[1];
+
+        vm.prank(alice);
+        bdl.insert(address(sand), 69, bundleId);
+
+        assertEq(bdl.bundleOf(address(sand), 69), bundleId); // check that the bundle has been inserted
     }
 
     function test_removeBundle() public {
+        test_insertBundle();
+
+        console.log(bdl.bundleIndexOf(address(sand), 69), bundleId);
+
+        vm.prank(users[1]);
+        bdl.remove(address(sand), 69, bundleId);
+        assertEq(bdl.bundleOf(address(sand), 69), 0); // check that the asset has been removed
+        
     }
 
 

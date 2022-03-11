@@ -68,6 +68,7 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     constructor(string memory name_, string memory symbol_) {
         _name = name_;
         _symbol = symbol_;
+        Counters.increment(_ids); // reserved ID 0
     }
 
     /**
@@ -277,7 +278,8 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         }
         _bundles[bundleId].push(hash);
         _bundleOf[hash] = bundleId;
-        _indices[hash] = _bundles[bundleId].length;
+
+        _indices[hash] = _bundles[bundleId].length-1;
     }
 
     function remove(
@@ -312,6 +314,24 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         }
         return true;
     }
+
+    function bundleOf(
+        address nftAddress,
+        uint256 tokenId
+    ) external view returns(uint256) {
+        bytes32 hash = generateHash(nftAddress, tokenId);
+        return _bundleOf[hash];
+    }
+
+    function bundleIndexOf(
+        address nftAddress,
+        uint256 tokenId
+    ) external view returns (uint256) {
+        bytes32 hash = generateHash(nftAddress, tokenId);
+        return _indices[hash];
+    }
+
+
 
     /// ******
     /// Internal
@@ -572,6 +592,7 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256 bundleId
     ) internal virtual {  
         uint index = _indices[hash]; 
+        _bundles[bundleId][index]=0;
         delete _bundles[bundleId][index];
     }
 

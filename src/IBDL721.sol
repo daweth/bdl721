@@ -37,5 +37,10 @@ interface IBDL721 is IERC165 {
 		uint256 tokenId
 	) external returns(bool);
 
+	function bundleOf(
+		address nftAddress,
+		uint256 tokenId
+	) external view returns(uint256);
+
 }
 
