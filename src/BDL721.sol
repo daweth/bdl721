@@ -212,7 +212,7 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
     }
         
     /// ******
-    /// Core Functions
+    /// CORE
     /// ******
 
     function create(
@@ -314,6 +314,11 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         }
         return true;
     }
+
+
+    /// ******
+    /// View
+    /// ******
 
     function bundleOf(
         address nftAddress,
@@ -540,12 +545,6 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
             Asset memory nft = _assets[bdl[i]];
             IERC721 nftRegistry = IERC721(nft.nftRegistry);
             nftRegistry.transferFrom(from, to, nft.tokenId);
-            /** 
-            (bool success, bytes memory data) = nft.nftRegistry.delegatecall(
-            abi.encodeWithSignature("transferFrom(address,address,uint256)",from,to,nft.tokenId)
-            );
-            require(success, "BDL721: Failed to transfer assets");
-            */
         }
     }
   
@@ -558,34 +557,8 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
             Asset memory nft = _assets[bdl[i]];
             IERC721 nftRegistry = IERC721(nft.nftRegistry);
             nftRegistry.approve(to, nft.tokenId);            
-
-/** 
- (bool success, bytes memory data) = address(nftRegistry).delegatecall(
-            abi.encodeWithSignature("approve(address,uint256)",to,nft.tokenId)
-            );
-            require(success, "BDL721: Failed to approve assets");
-*/
-           
         }
     }
-/**
-    function _setApprovalForAssets(
-        address owner,
-        address operator,
-        uint256 bundleId,
-        bool approved
-    ) internal virtual {
-        bytes32[] memory bdl = _bundles[bundleId];
-        for(uint i=0; i<bdl.length; i++){
-            Asset memory nft = _assets[bdl[i]];
-            IERC721 nftRegistry = IERC721(nft.nftRegistry);
-            if(nftRegistry.isApprovedForAll(owner, operator)){ break; }
-
-            nftRegistry.setApprovalForAll(operator, approved);
-        }
-    }
-
-**/
 
     function _removeFromBundleArray(
         bytes32 hash,

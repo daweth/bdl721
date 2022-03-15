@@ -38,6 +38,41 @@ contract BundlerTest is DSTest {
         dcl.safeMint(users[1], 2);
         sand.safeMint(users[1], 69); // asset to be inserted
     
+    ///    address[] memory nftAddresses = new address[](2);
+    ///    nftAddresses[0] = address(sand);
+    ///    nftAddresses[1] = address(dcl);
+    ///    require(nftAddresses.length==2, "wrong length");
+
+    ///    uint256[] memory tokenIds = new uint256[](4);
+    ///    tokenIds[0] = 1;
+    ///    tokenIds[1] = 2;
+    ///    tokenIds[2] = 1;
+    ///    tokenIds[3] = 2;
+
+    ///    uint256[] memory sizes = new uint256[](2);
+    ///    sizes[0] = 2;
+    ///    sizes[1] = 2;
+
+    ///    require(sand.ownerOf(1)==users[1], "Owner issue");
+
+    ///    vm.startPrank(users[1]);
+
+    ///    sand.setApprovalForAll(address(bdl), true);
+    ///    require(sand.isApprovedForAll(users[1], address(bdl)), "approval issue");
+    ///    dcl.setApprovalForAll(address(bdl), true);
+    ///    require(dcl.isApprovedForAll(users[1], address(bdl)), "approval issue");
+    ///    bundleId = bdl.create(nftAddresses, tokenIds, sizes);
+
+    ///    vm.stopPrank();
+
+    ///    console.log("bundleID", bundleId);
+    }
+
+    /// ******
+    /// GAS BENCHMARKING
+    /// ******
+    function testGas_create() public {
+        vm.prank(users[1]);
         address[] memory nftAddresses = new address[](2);
         nftAddresses[0] = address(sand);
         nftAddresses[1] = address(dcl);
@@ -64,9 +99,10 @@ contract BundlerTest is DSTest {
         bundleId = bdl.create(nftAddresses, tokenIds, sizes);
 
         vm.stopPrank();
-
-        console.log("bundleID", bundleId);
     }
+    
+
+
 
     function test_mintedAssets() public {
         assertEq(address(sand.ownerOf(1)), users[1]);
@@ -77,10 +113,12 @@ contract BundlerTest is DSTest {
 
 
     function test_createdBundle() public {
+        testGas_create();
         assertEq(address(bdl.ownerOf(bundleId)), users[1]);
     }
 
     function test_transferBundle() public {
+        testGas_create();
         address payable alice = users[1];
         address payable bob = users[3];
 
@@ -100,6 +138,7 @@ contract BundlerTest is DSTest {
     }
     
     function test_transferApprovalBundle() public {
+        testGas_create();
         address payable alice = users[1];
         address payable michael = users[2];
 
@@ -118,10 +157,12 @@ contract BundlerTest is DSTest {
     }
 
     function test_checkValidBundle() public {
+        testGas_create();
         require(bdl.check(bundleId), "Failed to check bundleID");
     }
     
     function test_checkInvalidBundle() public {
+        testGas_create();
         address payable stacy = users[1];
         address payable bob = users[2]; 
 
@@ -139,6 +180,7 @@ contract BundlerTest is DSTest {
     }
 
     function test_burnBundle() public {
+        testGas_create();
         address payable alice = users[1];
 
         vm.prank(alice);
@@ -150,6 +192,7 @@ contract BundlerTest is DSTest {
     }
 
     function test_insertBundle() public {
+        testGas_create();
         address payable alice = users[1];
 
         vm.prank(alice);
@@ -166,7 +209,6 @@ contract BundlerTest is DSTest {
         vm.prank(users[1]);
         bdl.remove(address(sand), 69, bundleId);
         assertEq(bdl.bundleOf(address(sand), 69), 0); // check that the asset has been removed
-        
     }
 
 
