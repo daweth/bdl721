@@ -220,34 +220,32 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         uint256[] memory _tokenIds,
         uint256[] memory _sizes
     ) external returns (uint256) {
+
         require(_nftAddresses.length == _sizes.length, "BDL721: size array does not match address array length");
 
         bytes32[] memory bdl = new bytes32[](_tokenIds.length);
         uint256 tokenId = Counters.current(_ids);
+		uint offset = 0;
 
-		    uint offset = 0;
-		    for(uint i=0; i<_nftAddresses.length; i++){
-			      IERC721 nftRegistry = IERC721(_nftAddresses[i]);
+		for(uint i=0; i<_nftAddresses.length; i++){
+		    IERC721 nftRegistry = IERC721(_nftAddresses[i]);
             require(nftRegistry.isApprovedForAll(_msgSender(), address(this)), "BDL721: Bundle Contract is not approved to manage these assets");
-
-			      for(uint j=0; j<_sizes[i]; j++){
-                    
+			for(uint j=0; j<_sizes[i]; j++){
                 require(nftRegistry.ownerOf(_tokenIds[offset+j])==_msgSender(), "BDL721: Only the owner can create a new bundle"); 
 
                 bytes32 hash = generateHash(_nftAddresses[i], _tokenIds[offset+j]);
                 require(_bundleOf[hash]==0, "BDL721: Asset is part of another bundle, check the bundle and try again");
-
                 Asset memory nft = _assets[hash];
+
                 if(nft.nftRegistry==address(0)){
                     _assets[hash] = Asset(_nftAddresses[i], _tokenIds[offset+j]);
                 }
                 _bundleOf[hash]=tokenId; // consider moving to the very end? /// sets the ownerOf to the new bundleID
                 _indices[hash] = offset+j; // store the index of the hash within the bundle
                 bdl[offset+j] = hash; // add the hash to the bundle in progress
-		        }
-			    offset += _sizes[i];
+		    }
+            offset += _sizes[i];
         }
-        
         _bundles[tokenId] = bdl;
         _mint(_msgSender(), tokenId);
         Counters.increment(_ids);
@@ -449,8 +447,6 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         _owners[tokenId] = to;
 
         emit Transfer(address(0), to, tokenId);
-
-        _afterTokenTransfer(address(0), to, tokenId);
     }
 
     /**
@@ -474,8 +470,6 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         delete _owners[tokenId];
 
         emit Transfer(owner, address(0), tokenId);
-
-        _afterTokenTransfer(owner, address(0), tokenId);
     }
 
     /**
@@ -502,8 +496,6 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
         _owners[tokenId] = to;
 
         emit Transfer(from, to, tokenId);
-
-        _afterTokenTransfer(from, to, tokenId);
     }
 
 
@@ -602,42 +594,4 @@ contract BDL721 is Context, ERC165, IBDL721, IERC721, IERC721Metadata {
             return true;
         }
     }
-
-    /**
-     * @dev Hook that is called before any token transfer. This includes minting
-     * and burning.
-     *
-     * Calling conditions:
-     *
-     * - When `from` and `to` are both non-zero, ``from``'s `tokenId` will be
-     * transferred to `to`.
-     * - When `from` is zero, `tokenId` will be minted for `to`.
-     * - When `to` is zero, ``from``'s `tokenId` will be burned.
-     * - `from` and `to` are never both zero.
-     *
-     * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
-     */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual {
-    }
-
-    /**
-     * @dev Hook that is called after any transfer of tokens. This includes
-     * minting and burning.
-     *
-     * Calling conditions:
-     *
-     * - when `from` and `to` are both non-zero.
-     * - `from` and `to` are never both zero.
-     *
-     * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
-     */
-    function _afterTokenTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) internal virtual {}
 }

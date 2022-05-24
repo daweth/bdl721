@@ -16,7 +16,6 @@ interface IBDL721 is IERC165 {
 		uint256[] calldata sizes
 	) external returns (uint256 bundleId);
 
-
 	function burn(
 		uint256 bundleId
 	) external;
